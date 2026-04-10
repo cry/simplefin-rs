@@ -14,7 +14,7 @@ SimpleFIN is an open protocol that lets users share their financial data (balanc
 
 ```toml
 [dependencies]
-simplefin-rs = { path = "../simplefin-rs" }  # or crates.io once published
+simplefin = "0.1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
