@@ -21,6 +21,33 @@ src/
   main.rs     # CLI binary
 ```
 
+## Key dependencies
+
+| Crate | Purpose |
+|---|---|
+| `reqwest` | Async HTTP client (rustls, HTTPS-only) |
+| `tokio` | Async runtime |
+| `serde` / `serde_json` | JSON deserialization of API responses |
+| `base64` | Decoding setup tokens |
+| `url` | Parsing and manipulating Access URLs |
+| `thiserror` | `Error` enum derivation |
+| `clap` | CLI argument parsing (`--start`, `--end`, etc.) |
+| `jiff` | Date parsing and formatting (`YYYY-MM-DD` ↔ UNIX timestamp) |
+| `expect-test` *(dev)* | Snapshot tests for model deserialization |
+
+## Testing
+
+```sh
+cargo test
+
+# After changing a model or its Debug output, update snapshots in place:
+UPDATE_EXPECT=1 cargo test
+```
+
+Model deserialization tests in `src/models.rs` use `expect-test` snapshots — each test calls a shared `check(json, expect![...])` helper that deserializes JSON into `AccountSet` and asserts the full `Debug` output. To add a new model test, write `expect![[""]]` as a placeholder and run `UPDATE_EXPECT=1 cargo test` to fill it in automatically.
+
+`src/client.rs` has unit tests for `from_access_url` parsing and `claim` token validation (no network required). `src/main.rs` has unit tests for `parse_date` covering `YYYY-MM-DD`, raw UNIX timestamps, and invalid inputs.
+
 ## Authentication flow
 
 SimpleFIN uses a two-step auth flow. The setup token is single-use; the Access URL is long-lived credentials.
@@ -111,8 +138,12 @@ All public methods return `simplefin::Result<T>` (`std::result::Result<T, simple
 # First-time: claim a setup token
 SIMPLEFIN_TOKEN=<base64-token> cargo run
 
-# Subsequent runs
-SIMPLEFIN_ACCESS_URL=https://user:pass@bridge.simplefin.org/simplefin cargo run
+# Subsequent runs — all flags are optional
+SIMPLEFIN_ACCESS_URL=https://user:pass@bridge.simplefin.org/simplefin cargo run -- \
+  --start 2025-01-01 \   # YYYY-MM-DD or UNIX timestamp, inclusive
+  --end   2025-04-01 \   # YYYY-MM-DD or UNIX timestamp, exclusive
+  --pending \            # include unposted transactions
+  --account <id>         # repeatable; omit for all accounts
 ```
 
 Get a test token from the SimpleFIN Bridge sandbox.

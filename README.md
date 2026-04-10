@@ -62,6 +62,8 @@ let account_set = client.get_accounts(AccountsRequest {
 }).await?;
 ```
 
+`start_date` and `end_date` are UNIX timestamps (seconds). The CLI accepts `YYYY-MM-DD` strings and converts them to UTC-midnight timestamps using [jiff](https://docs.rs/jiff).
+
 ### Working with the response
 
 ```rust
@@ -185,4 +187,10 @@ SIMPLEFIN_ACCESS_URL=... simplefin --start 2025-03-01 --pending
 cargo build
 cargo test
 cargo run -- --help
+```
+
+Model deserialization tests use [expect-test](https://docs.rs/expect-test) snapshots. If you change a model type or its `Debug` output, update the snapshots in place:
+
+```sh
+UPDATE_EXPECT=1 cargo test
 ```
