@@ -14,6 +14,10 @@ pub struct AccountSet {
     /// Financial accounts with optional transaction history.
     #[serde(default)]
     pub accounts: Vec<Account>,
+
+    /// Informational messages from the SimpleFIN server.
+    #[serde(default, rename = "x-api-message")]
+    pub api_messages: Vec<String>,
 }
 
 /// A financial account at an institution.
@@ -45,6 +49,10 @@ pub struct Account {
     /// Transactions within the requested date range, if not using `balances-only`.
     pub transactions: Option<Vec<Transaction>>,
 
+    /// Investment/asset holdings associated with this account.
+    #[serde(default)]
+    pub holdings: Vec<Holding>,
+
     /// Institution-specific additional fields.
     pub extra: Option<serde_json::Value>,
 }
@@ -64,6 +72,12 @@ pub struct Transaction {
     /// Human-readable description of the transaction.
     pub description: String,
 
+    /// Normalized payee name, if provided by the institution.
+    pub payee: Option<String>,
+
+    /// Additional memo text, if provided by the institution.
+    pub memo: Option<String>,
+
     /// When the transaction originally occurred, if known.
     pub transacted_at: Option<i64>,
 
@@ -72,6 +86,37 @@ pub struct Transaction {
 
     /// Institution-specific additional fields.
     pub extra: Option<serde_json::Value>,
+}
+
+/// An investment or asset holding within an account.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Holding {
+    /// Unique identifier for this holding.
+    pub id: String,
+
+    /// UNIX timestamp when this holding record was created.
+    pub created: i64,
+
+    /// ISO 4217 currency code or URL for custom currencies.
+    pub currency: String,
+
+    /// Cost basis as a numeric string.
+    pub cost_basis: Option<String>,
+
+    /// Human-readable description of the asset.
+    pub description: Option<String>,
+
+    /// Current market value as a numeric string.
+    pub market_value: Option<String>,
+
+    /// Purchase price per share as a numeric string.
+    pub purchase_price: Option<String>,
+
+    /// Number of shares/units as a numeric string.
+    pub shares: Option<String>,
+
+    /// Ticker symbol or other identifier for the asset.
+    pub symbol: Option<String>,
 }
 
 /// A financial institution connection (SimpleFIN v2).
@@ -85,6 +130,9 @@ pub struct Connection {
 
     /// Institution identifier — unique per SimpleFIN server.
     pub org_id: Option<serde_json::Value>,
+
+    /// Human-readable institution name.
+    pub org_name: Option<String>,
 
     /// Institution domain.
     pub org_url: Option<String>,
@@ -143,6 +191,7 @@ mod tests {
                     errors: [],
                     connections: [],
                     accounts: [],
+                    api_messages: [],
                 }
             "#]],
         );
@@ -158,6 +207,7 @@ mod tests {
                     errors: [],
                     connections: [],
                     accounts: [],
+                    api_messages: [],
                 }
             "#]],
         );
@@ -181,6 +231,7 @@ mod tests {
                     ],
                     connections: [],
                     accounts: [],
+                    api_messages: [],
                 }
             "#]],
         );
@@ -206,6 +257,7 @@ mod tests {
                     ],
                     connections: [],
                     accounts: [],
+                    api_messages: [],
                 }
             "#]],
         );
@@ -231,9 +283,11 @@ mod tests {
                             available_balance: None,
                             balance_date: 1700000000,
                             transactions: None,
+                            holdings: [],
                             extra: None,
                         },
                     ],
+                    api_messages: [],
                 }
             "#]],
         );
@@ -259,9 +313,11 @@ mod tests {
                             ),
                             balance_date: 1700000000,
                             transactions: None,
+                            holdings: [],
                             extra: None,
                         },
                     ],
+                    api_messages: [],
                 }
             "#]],
         );
@@ -287,9 +343,11 @@ mod tests {
                             transactions: Some(
                                 [],
                             ),
+                            holdings: [],
                             extra: None,
                         },
                     ],
+                    api_messages: [],
                 }
             "#]],
         );
@@ -323,15 +381,19 @@ mod tests {
                                         posted: 1700000000,
                                         amount: "-42.00",
                                         description: "Coffee shop",
+                                        payee: None,
+                                        memo: None,
                                         transacted_at: None,
                                         pending: None,
                                         extra: None,
                                     },
                                 ],
                             ),
+                            holdings: [],
                             extra: None,
                         },
                     ],
+                    api_messages: [],
                 }
             "#]],
         );
@@ -363,6 +425,8 @@ mod tests {
                                         posted: 0,
                                         amount: "-5.00",
                                         description: "Pending charge",
+                                        payee: None,
+                                        memo: None,
                                         transacted_at: None,
                                         pending: Some(
                                             true,
@@ -371,9 +435,11 @@ mod tests {
                                     },
                                 ],
                             ),
+                            holdings: [],
                             extra: None,
                         },
                     ],
+                    api_messages: [],
                 }
             "#]],
         );
@@ -405,6 +471,8 @@ mod tests {
                                         posted: 1700000100,
                                         amount: "10.00",
                                         description: "ATM",
+                                        payee: None,
+                                        memo: None,
                                         transacted_at: Some(
                                             1700000000,
                                         ),
@@ -413,9 +481,11 @@ mod tests {
                                     },
                                 ],
                             ),
+                            holdings: [],
                             extra: None,
                         },
                     ],
+                    api_messages: [],
                 }
             "#]],
         );
@@ -438,6 +508,7 @@ mod tests {
                             conn_id: "c1",
                             name: "My Bank",
                             org_id: None,
+                            org_name: None,
                             org_url: Some(
                                 "https://mybank.example",
                             ),
@@ -445,6 +516,7 @@ mod tests {
                         },
                     ],
                     accounts: [],
+                    api_messages: [],
                 }
             "#]],
         );
@@ -484,9 +556,11 @@ mod tests {
                             available_balance: None,
                             balance_date: 1700000000,
                             transactions: None,
+                            holdings: [],
                             extra: None,
                         },
                     ],
+                    api_messages: [],
                 }
             "#]],
         );
@@ -526,9 +600,11 @@ mod tests {
                             available_balance: None,
                             balance_date: 1700000000,
                             transactions: None,
+                            holdings: [],
                             extra: None,
                         },
                     ],
+                    api_messages: [],
                 }
             "#]],
         );
