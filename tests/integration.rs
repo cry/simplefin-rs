@@ -49,7 +49,10 @@ async fn get_accounts_default_has_required_fields() {
     for account in &account_set.accounts {
         assert!(!account.id.is_empty(), "account id must not be empty");
         assert!(!account.name.is_empty(), "account name must not be empty");
-        assert!(!account.currency.is_empty(), "account currency must not be empty");
+        assert!(
+            !account.currency.is_empty(),
+            "account currency must not be empty"
+        );
         account
             .balance
             .parse::<f64>()
@@ -108,10 +111,7 @@ async fn get_accounts_balances_only_omits_transactions() {
         "expected accounts even with balances_only"
     );
     for account in &account_set.accounts {
-        let empty = account
-            .transactions
-            .as_ref()
-            .map_or(true, |t| t.is_empty());
+        let empty = account.transactions.as_ref().map_or(true, |t| t.is_empty());
         assert!(
             empty,
             "account '{}' should have no transactions when balances_only=true",
@@ -125,7 +125,7 @@ async fn get_accounts_date_range_bounds_transactions() {
     ci_only!();
     let now = now_secs();
     let start = now - 365 * 86400; // one year ago
-    let end = now + 365 * 86400;   // one year from now
+    let end = now + 365 * 86400; // one year from now
 
     let account_set = demo_client()
         .get_accounts(AccountsRequest {
@@ -143,12 +143,16 @@ async fn get_accounts_date_range_bounds_transactions() {
                     assert!(
                         txn.posted >= start,
                         "transaction '{}' posted={} is before start_date={}",
-                        txn.id, txn.posted, start
+                        txn.id,
+                        txn.posted,
+                        start
                     );
                     assert!(
                         txn.posted < end,
                         "transaction '{}' posted={} is on or after end_date={}",
-                        txn.id, txn.posted, end
+                        txn.id,
+                        txn.posted,
+                        end
                     );
                 }
             }
@@ -224,6 +228,10 @@ async fn get_accounts_no_errors_for_valid_demo_credentials() {
     assert!(
         account_set.errors.is_empty(),
         "expected no server errors for demo credentials, got: {:?}",
-        account_set.errors.iter().map(|e| &e.code).collect::<Vec<_>>()
+        account_set
+            .errors
+            .iter()
+            .map(|e| &e.code)
+            .collect::<Vec<_>>()
     );
 }
