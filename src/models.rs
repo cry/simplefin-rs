@@ -450,6 +450,90 @@ mod tests {
         );
     }
 
+    // --- Rate-limit / quota warnings ---
+
+    // The SimpleFIN Bridge signals quota exhaustion by injecting error codes
+    // into `errlist` on an otherwise-successful 200 response.  The client must
+    // surface both the warning and the account data; neither must be silently
+    // dropped.
+    #[test]
+    fn quota_warning_alongside_valid_accounts() {
+        check(
+            r#"{
+                "errlist": [{"code": "gen.quota", "msg": "Daily quota exceeded"}],
+                "accounts": [{"id": "a", "name": "Checking", "currency": "USD", "balance": "100.00", "balance-date": 1700000000}]
+            }"#,
+            expect![[r#"
+                AccountSet {
+                    errors: [
+                        SfinError {
+                            code: "gen.quota",
+                            message: "Daily quota exceeded",
+                            conn_id: None,
+                            account_id: None,
+                        },
+                    ],
+                    connections: [],
+                    accounts: [
+                        Account {
+                            id: "a",
+                            name: "Checking",
+                            conn_id: None,
+                            currency: "USD",
+                            balance: "100.00",
+                            available_balance: None,
+                            balance_date: 1700000000,
+                            transactions: None,
+                            extra: None,
+                        },
+                    ],
+                }
+            "#]],
+        );
+    }
+
+    // A connection-scoped quota warning (con.quota) targets one institution
+    // while other accounts continue to work normally.
+    #[test]
+    fn connection_quota_warning_with_conn_id() {
+        check(
+            r#"{
+                "errlist": [{"code": "con.quota", "msg": "Connection quota exceeded", "conn_id": "c1"}],
+                "accounts": [{"id": "a", "name": "Checking", "currency": "USD", "balance": "100.00", "balance-date": 1700000000, "conn_id": "c1"}]
+            }"#,
+            expect![[r#"
+                AccountSet {
+                    errors: [
+                        SfinError {
+                            code: "con.quota",
+                            message: "Connection quota exceeded",
+                            conn_id: Some(
+                                "c1",
+                            ),
+                            account_id: None,
+                        },
+                    ],
+                    connections: [],
+                    accounts: [
+                        Account {
+                            id: "a",
+                            name: "Checking",
+                            conn_id: Some(
+                                "c1",
+                            ),
+                            currency: "USD",
+                            balance: "100.00",
+                            available_balance: None,
+                            balance_date: 1700000000,
+                            transactions: None,
+                            extra: None,
+                        },
+                    ],
+                }
+            "#]],
+        );
+    }
+
     // --- Bad JSON is rejected ---
 
     #[test]
