@@ -20,3 +20,7 @@ base64    = "0.22"
 url       = "2"
 thiserror = "2"
 clap       = { version = "4", features = ["derive"] }
+jiff       = "0.2"
+
+[dev-dependencies]
+expect-test = "1"

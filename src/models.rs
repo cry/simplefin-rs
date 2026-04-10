@@ -115,3 +115,347 @@ pub struct SfinError {
     /// Account this error relates to, if any.
     pub account_id: Option<String>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use expect_test::{Expect, expect};
+
+    fn check(json: &str, expect: Expect) {
+        let set: AccountSet = serde_json::from_str(json).unwrap();
+        expect.assert_debug_eq(&set);
+    }
+
+    fn minimal_account(extra: &str) -> String {
+        format!(
+            r#"{{"accounts": [{{"id": "a", "name": "Checking", "currency": "USD", "balance": "1234.56", "balance-date": 1700000000 {extra}}}]}}"#
+        )
+    }
+
+    // --- AccountSet defaults ---
+
+    #[test]
+    fn empty_account_set() {
+        check(
+            r#"{"accounts": [], "connections": []}"#,
+            expect![[r#"
+                AccountSet {
+                    errors: [],
+                    connections: [],
+                    accounts: [],
+                }
+            "#]],
+        );
+    }
+
+    #[test]
+    fn missing_optional_fields_default_to_empty() {
+        // errlist and connections are absent — both must default to [].
+        check(
+            r#"{"accounts": []}"#,
+            expect![[r#"
+                AccountSet {
+                    errors: [],
+                    connections: [],
+                    accounts: [],
+                }
+            "#]],
+        );
+    }
+
+    // --- SfinError: "errlist" and "msg" renames, optional ids ---
+
+    #[test]
+    fn errlist_rename_and_bare_error() {
+        check(
+            r#"{"errlist": [{"code": "gen.auth", "msg": "Not authorised"}], "accounts": []}"#,
+            expect![[r#"
+                AccountSet {
+                    errors: [
+                        SfinError {
+                            code: "gen.auth",
+                            message: "Not authorised",
+                            conn_id: None,
+                            account_id: None,
+                        },
+                    ],
+                    connections: [],
+                    accounts: [],
+                }
+            "#]],
+        );
+    }
+
+    #[test]
+    fn sfin_error_with_optional_ids() {
+        check(
+            r#"{"errlist": [{"code": "con.auth", "msg": "Bad creds", "conn_id": "c1", "account_id": "a1"}], "accounts": []}"#,
+            expect![[r#"
+                AccountSet {
+                    errors: [
+                        SfinError {
+                            code: "con.auth",
+                            message: "Bad creds",
+                            conn_id: Some(
+                                "c1",
+                            ),
+                            account_id: Some(
+                                "a1",
+                            ),
+                        },
+                    ],
+                    connections: [],
+                    accounts: [],
+                }
+            "#]],
+        );
+    }
+
+    // --- Account: field renames and optional fields ---
+
+    #[test]
+    fn account_minimal_no_transactions() {
+        check(
+            &minimal_account(""),
+            expect![[r#"
+                AccountSet {
+                    errors: [],
+                    connections: [],
+                    accounts: [
+                        Account {
+                            id: "a",
+                            name: "Checking",
+                            conn_id: None,
+                            currency: "USD",
+                            balance: "1234.56",
+                            available_balance: None,
+                            balance_date: 1700000000,
+                            transactions: None,
+                            extra: None,
+                        },
+                    ],
+                }
+            "#]],
+        );
+    }
+
+    #[test]
+    fn account_with_available_balance() {
+        check(
+            &minimal_account(r#", "available-balance": "800.00""#),
+            expect![[r#"
+                AccountSet {
+                    errors: [],
+                    connections: [],
+                    accounts: [
+                        Account {
+                            id: "a",
+                            name: "Checking",
+                            conn_id: None,
+                            currency: "USD",
+                            balance: "1234.56",
+                            available_balance: Some(
+                                "800.00",
+                            ),
+                            balance_date: 1700000000,
+                            transactions: None,
+                            extra: None,
+                        },
+                    ],
+                }
+            "#]],
+        );
+    }
+
+    #[test]
+    fn account_with_empty_transactions() {
+        check(
+            &minimal_account(r#", "transactions": []"#),
+            expect![[r#"
+                AccountSet {
+                    errors: [],
+                    connections: [],
+                    accounts: [
+                        Account {
+                            id: "a",
+                            name: "Checking",
+                            conn_id: None,
+                            currency: "USD",
+                            balance: "1234.56",
+                            available_balance: None,
+                            balance_date: 1700000000,
+                            transactions: Some(
+                                [],
+                            ),
+                            extra: None,
+                        },
+                    ],
+                }
+            "#]],
+        );
+    }
+
+    // --- Transaction variants ---
+
+    #[test]
+    fn posted_transaction() {
+        check(
+            &minimal_account(
+                r#", "transactions": [{"id": "t1", "posted": 1700000000, "amount": "-42.00", "description": "Coffee shop"}]"#,
+            ),
+            expect![[r#"
+                AccountSet {
+                    errors: [],
+                    connections: [],
+                    accounts: [
+                        Account {
+                            id: "a",
+                            name: "Checking",
+                            conn_id: None,
+                            currency: "USD",
+                            balance: "1234.56",
+                            available_balance: None,
+                            balance_date: 1700000000,
+                            transactions: Some(
+                                [
+                                    Transaction {
+                                        id: "t1",
+                                        posted: 1700000000,
+                                        amount: "-42.00",
+                                        description: "Coffee shop",
+                                        transacted_at: None,
+                                        pending: None,
+                                        extra: None,
+                                    },
+                                ],
+                            ),
+                            extra: None,
+                        },
+                    ],
+                }
+            "#]],
+        );
+    }
+
+    #[test]
+    fn pending_transaction_posted_zero() {
+        check(
+            &minimal_account(
+                r#", "transactions": [{"id": "t2", "posted": 0, "amount": "-5.00", "description": "Pending charge", "pending": true}]"#,
+            ),
+            expect![[r#"
+                AccountSet {
+                    errors: [],
+                    connections: [],
+                    accounts: [
+                        Account {
+                            id: "a",
+                            name: "Checking",
+                            conn_id: None,
+                            currency: "USD",
+                            balance: "1234.56",
+                            available_balance: None,
+                            balance_date: 1700000000,
+                            transactions: Some(
+                                [
+                                    Transaction {
+                                        id: "t2",
+                                        posted: 0,
+                                        amount: "-5.00",
+                                        description: "Pending charge",
+                                        transacted_at: None,
+                                        pending: Some(
+                                            true,
+                                        ),
+                                        extra: None,
+                                    },
+                                ],
+                            ),
+                            extra: None,
+                        },
+                    ],
+                }
+            "#]],
+        );
+    }
+
+    #[test]
+    fn transaction_with_transacted_at() {
+        check(
+            &minimal_account(
+                r#", "transactions": [{"id": "t3", "posted": 1700000100, "amount": "10.00", "description": "ATM", "transacted_at": 1700000000}]"#,
+            ),
+            expect![[r#"
+                AccountSet {
+                    errors: [],
+                    connections: [],
+                    accounts: [
+                        Account {
+                            id: "a",
+                            name: "Checking",
+                            conn_id: None,
+                            currency: "USD",
+                            balance: "1234.56",
+                            available_balance: None,
+                            balance_date: 1700000000,
+                            transactions: Some(
+                                [
+                                    Transaction {
+                                        id: "t3",
+                                        posted: 1700000100,
+                                        amount: "10.00",
+                                        description: "ATM",
+                                        transacted_at: Some(
+                                            1700000000,
+                                        ),
+                                        pending: None,
+                                        extra: None,
+                                    },
+                                ],
+                            ),
+                            extra: None,
+                        },
+                    ],
+                }
+            "#]],
+        );
+    }
+
+    // --- Connection ---
+
+    #[test]
+    fn connection_fields() {
+        check(
+            r#"{
+                "accounts": [],
+                "connections": [{"conn_id": "c1", "name": "My Bank", "org_url": "https://mybank.example"}]
+            }"#,
+            expect![[r#"
+                AccountSet {
+                    errors: [],
+                    connections: [
+                        Connection {
+                            conn_id: "c1",
+                            name: "My Bank",
+                            org_id: None,
+                            org_url: Some(
+                                "https://mybank.example",
+                            ),
+                            sfin_url: None,
+                        },
+                    ],
+                    accounts: [],
+                }
+            "#]],
+        );
+    }
+
+    // --- Bad JSON is rejected ---
+
+    #[test]
+    fn missing_required_field_errors() {
+        // `balance` is required on Account — deserializing without it must fail.
+        let json = r#"{"accounts": [{"id": "a", "name": "n", "currency": "USD", "balance-date": 0}]}"#;
+        assert!(serde_json::from_str::<AccountSet>(json).is_err());
+    }
+}

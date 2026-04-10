@@ -1,4 +1,5 @@
 use clap::Parser;
+use jiff::{Timestamp, civil::Date, tz::TimeZone};
 use simplefin::{AccountsRequest, SimpleFINClient};
 use std::env;
 
@@ -141,31 +142,16 @@ async fn run() -> simplefin::Result<()> {
 
 /// Parse a date string as either `YYYY-MM-DD` (UTC midnight) or a raw UNIX timestamp.
 fn parse_date(s: &str) -> Result<i64, String> {
-    // Try YYYY-MM-DD first.
-    if let Some((date_part, "")) = s.split_once(' ').map(|_| ("", "")).or_else(|| {
-        // exactly 10 chars: YYYY-MM-DD
-        if s.len() == 10 && s.as_bytes()[4] == b'-' && s.as_bytes()[7] == b'-' {
-            Some((s, ""))
-        } else {
-            None
-        }
-    }) {
-        let parts: Vec<&str> = date_part.splitn(3, '-').collect();
-        if parts.len() == 3 {
-            let year: i32 = parts[0]
-                .parse()
-                .map_err(|_| format!("invalid year in '{s}'"))?;
-            let month: u32 = parts[1]
-                .parse()
-                .map_err(|_| format!("invalid month in '{s}'"))?;
-            let day: u32 = parts[2]
-                .parse()
-                .map_err(|_| format!("invalid day in '{s}'"))?;
-            if month < 1 || month > 12 || day < 1 || day > 31 {
-                return Err(format!("date out of range: '{s}'"));
-            }
-            return Ok(ymd_to_unix(year, month, day));
-        }
+    // Detect YYYY-MM-DD by shape (10 chars, dashes at positions 4 and 7).
+    if s.len() == 10 && s.as_bytes()[4] == b'-' && s.as_bytes()[7] == b'-' {
+        let date: Date = s
+            .parse()
+            .map_err(|e| format!("invalid date '{s}': {e}"))?;
+        return date
+            .at(0, 0, 0, 0)
+            .in_tz("UTC")
+            .map(|z: jiff::Zoned| z.timestamp().as_second())
+            .map_err(|e| format!("timezone error: {e}"));
     }
 
     // Fall back to raw UNIX timestamp.
@@ -173,30 +159,73 @@ fn parse_date(s: &str) -> Result<i64, String> {
         .map_err(|_| format!("expected YYYY-MM-DD or a UNIX timestamp, got '{s}'"))
 }
 
-/// Convert a Gregorian date to a UNIX timestamp at UTC midnight.
-/// Uses Howard Hinnant's civil-from-days algorithm (public domain).
-fn ymd_to_unix(year: i32, month: u32, day: u32) -> i64 {
-    let y = year as i64 - (month <= 2) as i64;
-    let era = if y >= 0 { y } else { y - 399 } / 400;
-    let yoe = y - era * 400; // [0, 399]
-    let m = month as i64;
-    let doy = (153 * (m + if month > 2 { -3 } else { 9 }) + 2) / 5 + day as i64 - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    (era * 146097 + doe - 719468) * 86400
+/// Format a UNIX timestamp as `YYYY-MM-DD` (UTC) for display.
+fn format_date(ts: i64) -> String {
+    match Timestamp::from_second(ts) {
+        Ok(t) => t.to_zoned(TimeZone::UTC).date().to_string(),
+        Err(_) => ts.to_string(),
+    }
 }
 
-/// Format a UNIX timestamp as `YYYY-MM-DD` for display.
-fn format_date(ts: i64) -> String {
-    // Reverse of ymd_to_unix — civil_from_days (Hinnant).
-    let z = ts / 86400 + 719468;
-    let era = if z >= 0 { z } else { z - 146096 } / 146097;
-    let doe = z - era * 146097;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = if m <= 2 { y + 1 } else { y };
-    format!("{y:04}-{m:02}-{d:02}")
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_yyyy_mm_dd_epoch() {
+        assert_eq!(parse_date("1970-01-01").unwrap(), 0);
+    }
+
+    #[test]
+    fn parse_yyyy_mm_dd_known() {
+        assert_eq!(parse_date("2024-01-01").unwrap(), 1_704_067_200);
+    }
+
+    #[test]
+    fn parse_yyyy_mm_dd_leap_day() {
+        // jiff validates the calendar, so Feb 29 on a leap year must succeed.
+        assert!(parse_date("2000-02-29").is_ok());
+    }
+
+    #[test]
+    fn parse_raw_unix_timestamp() {
+        assert_eq!(parse_date("1704067200").unwrap(), 1_704_067_200);
+    }
+
+    #[test]
+    fn parse_zero_timestamp() {
+        assert_eq!(parse_date("0").unwrap(), 0);
+    }
+
+    #[test]
+    fn parse_negative_timestamp() {
+        assert_eq!(parse_date("-86400").unwrap(), -86400);
+    }
+
+    #[test]
+    fn parse_invalid_string_errors() {
+        assert!(parse_date("not-a-date").is_err());
+    }
+
+    #[test]
+    fn parse_month_out_of_range_errors() {
+        assert!(parse_date("2024-13-01").is_err());
+    }
+
+    #[test]
+    fn parse_day_out_of_range_errors() {
+        assert!(parse_date("2024-01-32").is_err());
+    }
+
+    #[test]
+    fn parse_feb_29_non_leap_year_errors() {
+        assert!(parse_date("2023-02-29").is_err());
+    }
+
+    #[test]
+    fn parse_short_date_falls_back_to_timestamp_error() {
+        // "2024-1-1" doesn't match the 10-char YYYY-MM-DD shape so it tries
+        // to parse as i64, which also fails.
+        assert!(parse_date("2024-1-1").is_err());
+    }
 }

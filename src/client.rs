@@ -148,3 +148,65 @@ impl SimpleFINClient {
         Ok(account_set)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Error;
+
+    // --- from_access_url ---
+
+    #[test]
+    fn from_access_url_valid() {
+        let url = "https://user:pass@bridge.simplefin.org/simplefin";
+        let client = SimpleFINClient::from_access_url(url).unwrap();
+        // Round-trips through url::Url — credentials are preserved.
+        assert!(client.access_url_str().starts_with("https://"));
+        assert!(client.access_url_str().contains("bridge.simplefin.org"));
+    }
+
+    #[test]
+    fn from_access_url_strips_surrounding_whitespace() {
+        let url = "  https://user:pass@bridge.simplefin.org/simplefin  ";
+        let client = SimpleFINClient::from_access_url(url).unwrap();
+        assert!(!client.access_url_str().starts_with(' '));
+        assert!(!client.access_url_str().ends_with(' '));
+    }
+
+    #[test]
+    fn from_access_url_invalid_url_errors() {
+        let result = SimpleFINClient::from_access_url("not a url");
+        assert!(matches!(result, Err(Error::UrlParse(_))));
+    }
+
+    #[test]
+    fn from_access_url_empty_string_errors() {
+        let result = SimpleFINClient::from_access_url("");
+        assert!(matches!(result, Err(Error::UrlParse(_))));
+    }
+
+    // --- claim — token validation (no network) ---
+
+    #[tokio::test]
+    async fn claim_invalid_base64_errors() {
+        let result = SimpleFINClient::claim("not!!valid!!base64").await;
+        assert!(matches!(result, Err(Error::InvalidToken(_))));
+    }
+
+    #[tokio::test]
+    async fn claim_base64_of_non_url_errors() {
+        // base64("hello world") = "aGVsbG8gd29ybGQ=" — valid base64, not a URL.
+        let result = SimpleFINClient::claim("aGVsbG8gd29ybGQ=").await;
+        assert!(matches!(result, Err(Error::InvalidToken(_))));
+    }
+
+    #[tokio::test]
+    async fn claim_base64_of_http_url_rejected_by_https_only_client() {
+        // base64("http://example.com/claim/token") — valid URL but plain HTTP.
+        // The https_only client will refuse to send the request.
+        use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+        let token = BASE64.encode("http://example.com/claim/token");
+        let result = SimpleFINClient::claim(&token).await;
+        assert!(matches!(result, Err(Error::Http(_))));
+    }
+}
