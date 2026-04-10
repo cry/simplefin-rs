@@ -455,7 +455,8 @@ mod tests {
     #[test]
     fn missing_required_field_errors() {
         // `balance` is required on Account — deserializing without it must fail.
-        let json = r#"{"accounts": [{"id": "a", "name": "n", "currency": "USD", "balance-date": 0}]}"#;
+        let json =
+            r#"{"accounts": [{"id": "a", "name": "n", "currency": "USD", "balance-date": 0}]}"#;
         assert!(serde_json::from_str::<AccountSet>(json).is_err());
     }
 }

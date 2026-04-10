@@ -2,11 +2,7 @@ use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use reqwest::{Client, StatusCode};
 use url::Url;
 
-use crate::{
-    error::Error,
-    models::AccountSet,
-    Result,
-};
+use crate::{Result, error::Error, models::AccountSet};
 
 /// Parameters for `GET /accounts`.
 #[derive(Debug, Clone, Default)]
@@ -41,9 +37,7 @@ pub struct SimpleFINClient {
 
 impl SimpleFINClient {
     fn build_http_client() -> Result<Client> {
-        Ok(Client::builder()
-            .https_only(true)
-            .build()?)
+        Ok(Client::builder().https_only(true).build()?)
     }
 
     /// Exchange a setup token for an Access URL and return a ready client.
@@ -68,9 +62,7 @@ impl SimpleFINClient {
         match response.status() {
             StatusCode::FORBIDDEN => return Err(Error::TokenClaimFailed),
             s if !s.is_success() => {
-                return Err(Error::Http(
-                    response.error_for_status().unwrap_err(),
-                ));
+                return Err(Error::Http(response.error_for_status().unwrap_err()));
             }
             _ => {}
         }
@@ -78,7 +70,10 @@ impl SimpleFINClient {
         let access_url_str = response.text().await?;
         let access_url = Url::parse(access_url_str.trim())?;
 
-        Ok(Self { access_url, inner: http })
+        Ok(Self {
+            access_url,
+            inner: http,
+        })
     }
 
     /// Restore a client from a previously claimed Access URL.

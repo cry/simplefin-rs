@@ -144,9 +144,7 @@ async fn run() -> simplefin::Result<()> {
 fn parse_date(s: &str) -> Result<i64, String> {
     // Detect YYYY-MM-DD by shape (10 chars, dashes at positions 4 and 7).
     if s.len() == 10 && s.as_bytes()[4] == b'-' && s.as_bytes()[7] == b'-' {
-        let date: Date = s
-            .parse()
-            .map_err(|e| format!("invalid date '{s}': {e}"))?;
+        let date: Date = s.parse().map_err(|e| format!("invalid date '{s}': {e}"))?;
         return date
             .at(0, 0, 0, 0)
             .in_tz("UTC")
